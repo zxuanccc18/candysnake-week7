@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Snake · 贪吃蛇</title>
+<style>
+  :root {
+    --bg: #fff8f2;
+    --panel: rgba(255, 255, 255, .88);
+    --text: #5d5872;
+    --muted: #9690a8;
+    --pink: #f6a9c8;
+    --cyan: #a9dce8;
+    --yellow: #f7d98b;
+    --green: #b9dfb5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    padding: 24px; color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 15% 15%, rgba(255,92,168,.22), transparent 28%),
+      radial-gradient(circle at 85% 80%, rgba(81,229,255,.18), transparent 30%),
+      linear-gradient(135deg, #11142c, #17102b 55%, #101d32);
+  }
+  .game-shell { width: min(100%, 760px); }
+  header { text-align: center; margin-bottom: 18px; }
+  .eyebrow { color: #91bfca; font-size: .75rem; letter-spacing: .28em; font-weight: 800; }
+  h1 { margin: 7px 0 5px; font-size: clamp(2rem, 6vw, 3.3rem); letter-spacing: -.05em; }
+  h1 span { color: #e99fbd; text-shadow: 0 2px 8px rgba(233,159,189,.20); }
+  .subtitle { color: var(--muted); margin: 0; font-size: .95rem; }
+  .panel {
+    background: var(--panel); border: 1px solid rgba(190,177,207,.25);
+    border-radius: 22px; padding: 18px; box-shadow: 0 14px 38px rgba(124,111,151,.12);
+    backdrop-filter: blur(10px);
+  }
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stats { display: flex; gap: 10px; }
+  .stat {
+    min-width: 105px; padding: 9px 14px; border-radius: 14px;
+    background: #fff9fc; border: 1px solid #f0e8f1;
+  }
+  .stat small { display: block; color: var(--muted); font-size: .68rem; letter-spacing: .12em; }
+  .stat strong { font-size: 1.35rem; color: #d3ae65; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    border: 0; cursor: pointer; color: #101327; font-weight: 800;
+    border-radius: 12px; padding: 10px 15px; transition: transform .15s, filter .15s;
+  }
+  button:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  button:active { transform: translateY(0); }
+  .primary { background: linear-gradient(135deg, var(--yellow), #ffb86b); }
+  .secondary { background: #b6f4ff; }
+  .sound-btn { background: #e7c4ff; }
+  .board-wrap { position: relative; }
+  canvas {
+    display: block; width: 100%; aspect-ratio: 1 / 1; height: auto;
+    border-radius: 16px; background: #fffaf5;
+    border: 1px solid #eee5e8;
+    box-shadow: inset 0 0 24px rgba(190,177,207,.10);
+    touch-action: none;
+  }
+  .overlay {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    border-radius: 16px; background: rgba(255, 250, 248, .82);
+    text-align: center; padding: 20px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay-card { max-width: 320px; }
+  .overlay h2 { font-size: 2rem; margin: 0 0 8px; }
+  .overlay p { color: var(--muted); line-height: 1.55; margin: 0 0 18px; }
+  .hint { color: var(--muted); text-align: center; font-size: .82rem; margin: 14px 0 0; }
+  kbd { color: #6d6680; background: #fff; border: 1px solid #e9e1ed; border-radius: 5px; padding: 2px 6px; }
+  .mobile-controls { display: none; margin: 16px auto 0; width: 176px; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .mobile-controls button { padding: 12px 0; background: rgba(204,234,240,.95); color: #65788a; font-size: 1.1rem; }
+  .mobile-controls button:nth-child(1) { grid-column: 2; }
+  .mobile-controls button:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .mobile-controls button:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .mobile-controls button:nth-child(4) { grid-column: 3; grid-row: 2; }
+  @media (max-width: 600px) {
+    body { padding: 14px; }
+    .panel { padding: 12px; border-radius: 18px; }
+    .stat { min-width: 82px; padding: 8px 10px; }
+    .mobile-controls { display: grid; }
+    .hint.desktop-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="game-shell">
+  <header>
+    <div class="eyebrow">A LITTLE SNAKE ADVENTURE</div>
+    <h1>SWEET <span>SNAKE</span></h1>
+    <p class="subtitle">吃掉小点心，让小蛇慢慢变长吧！</p>
+  </header>
+
+  <section class="panel">
+    <div class="topbar">
+      <div class="stats">
+        <div class="stat"><small>SCORE</small><strong id="score">0</strong></div>
+        <div class="stat"><small>BEST</small><strong id="best">0</strong></div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="startBtn">开始游戏</button>
+        <button class="secondary" id="pauseBtn">暂停</button>
+        <button class="sound-btn" id="soundBtn" aria-pressed="true">🔊 音乐/音效开</button>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <canvas id="game" width="600" height="600" aria-label="贪吃蛇游戏区域"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="overlay-card">
+          <h2 id="overlayTitle">准备好了吗？</h2>
+          <p id="overlayText">使用方向键或 WASD 控制蛇移动。吃到能量点就能得分，撞到墙壁或自己就会结束游戏。</p>
+          <button class="primary" id="overlayBtn">开始挑战</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-controls" aria-label="触控方向控制">
+      <button data-dir="up" aria-label="向上">▲</button>
+      <button data-dir="left" aria-label="向左">◀</button>
+      <button data-dir="down" aria-label="向下">▼</button>
+      <button data-dir="right" aria-label="向右">▶</button>
+    </div>
+    <p class="hint desktop-hint">控制：<kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>　·　暂停：<kbd>Space</kbd> / <kbd>P</kbd></p>
+    <p class="hint">小提示：手机也可以使用下方方向按钮。背景音乐与音效由浏览器即时生成，无需下载音频文件。</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayText = document.getElementById('overlayText');
+  const overlayBtn = document.getElementById('overlayBtn');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const soundBtn = document.getElementById('soundBtn');
+
+  const cells = 20;
+  const cell = canvas.width / cells;
+  let snake, food, direction, nextDirection, score, best = 0;
+  let timer = null;
+  let running = false;
+  let soundOn = true;
+  let audioCtx = null;
+  let musicTimer = null;
+  let musicStep = 0;
+  const musicNotes = [523.25, 659.25, 587.33, 392.00, 440.00, 587.33, 523.25, 392.00];
+
+  try { best = Number(localStorage.getItem('neonSnakeBest')) || 0; } catch (_) {}
+  bestEl.textContent = best;
+
+  function playTone(freq, duration = .09, type = 'sine', volume = .045) {
+    if (!soundOn) return;
+    try {
+      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(.001, audioCtx.currentTime + duration);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + duration);
+    } catch (_) { /* 浏览器不支持音频时，游戏仍可正常运行 */ }
+  }
+  const sfx = {
+    eat() { playTone(660, .08, 'sine'); setTimeout(() => playTone(880, .1, 'sine'), 65); },
+    start() { playTone(440, .1); setTimeout(() => playTone(660, .12), 90); },
+    pause() { playTone(330, .12, 'triangle'); },
+    over() { playTone(220, .22, 'sawtooth', .035); setTimeout(() => playTone(165, .3, 'sawtooth', .03), 150); }
+  };
+
+  // Soft, cheerful background melody made with Web Audio (no external audio file needed).
+  function playMusicNote(freq) {
+    if (!soundOn || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.012, audioCtx.currentTime + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.9);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.95);
+  }
+
+  function startBackgroundMusic() {
+    if (!soundOn || musicTimer) return;
+    try {
+      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      musicStep = 0;
+      playMusicNote(musicNotes[musicStep++ % musicNotes.length]);
+      musicTimer = setInterval(() => {
+        playMusicNote(musicNotes[musicStep++ % musicNotes.length]);
+      }, 650);
+    } catch (_) { /* 音频不可用时不影响游戏 */ }
+  }
+
+  function stopBackgroundMusic() {
+    if (musicTimer) clearInterval(musicTimer);
+    musicTimer = null;
+  }
+
+  function resetGame() {
+    snake = [{x: 9, y: 10}, {x: 8, y: 10}, {x: 7, y: 10}];
+    direction = {x: 1, y: 0};
+    nextDirection = {...direction};
+    score = 0;
+    scoreEl.textContent = score;
+    placeFood();
+    draw();
+  }
+
+  function placeFood() {
+    do {
+      food = {x: Math.floor(Math.random() * cells), y: Math.floor(Math.random() * cells)};
+    } while (snake.some(part => part.x === food.x && part.y === food.y));
+  }
+
+  function roundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fffaf5';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 柔和网格
+    ctx.strokeStyle = 'rgba(190, 177, 207, .20)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= cells; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(canvas.width, i * cell); ctx.stroke();
+    }
+
+    // 食物发光效果
+    const fx = (food.x + .5) * cell, fy = (food.y + .5) * cell;
+    ctx.save();
+    ctx.shadowColor = '#f6a9c8'; ctx.shadowBlur = 13;
+    const pulse = 6 + Math.sin(Date.now() / 170) * 1.5;
+    ctx.fillStyle = '#f2a9c7';
+    ctx.beginPath(); ctx.arc(fx, fy, pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff1f6';
+    ctx.beginPath(); ctx.arc(fx - 2, fy - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // 蛇身渐变
+    snake.forEach((part, index) => {
+      const inset = 2.5;
+      const x = part.x * cell + inset, y = part.y * cell + inset;
+      const grad = ctx.createLinearGradient(x, y, x + cell, y + cell);
+      if (index === 0) {
+        grad.addColorStop(0, '#f9df9b'); grad.addColorStop(1, '#a9d7ad');
+        ctx.shadowColor = '#b9dfb5'; ctx.shadowBlur = 9;
+      } else {
+        const colors = [
+          ['#b7dce9', '#9fcbdc'],
+          ['#d6c6e8', '#bfaed8'],
+          ['#f2c2d2', '#e9a9c1'],
+          ['#c4dfc0', '#a9d2a8'],
+          ['#f4d8a2', '#eac58d']
+        ];
+        const palette = colors[index % colors.length];
+        grad.addColorStop(0, palette[0]);
+        grad.addColorStop(1, palette[1]);
+        ctx.shadowColor = '#c6dfe5'; ctx.shadowBlur = 5;
+      }
+      ctx.fillStyle = grad;
+      roundedRect(x, y, cell - inset * 2, cell - inset * 2, 6);
+      ctx.shadowBlur = 0;
+    });
+
+    // 蛇头眼睛
+    const head = snake[0];
+    const cx = (head.x + .5) * cell, cy = (head.y + .5) * cell;
+    const eyeOffset = direction.x !== 0 ? {x: direction.x * 4, y: -4} : {x: 4, y: direction.y * 4};
+    ctx.fillStyle = '#65788a';
+    ctx.beginPath(); ctx.arc(cx + eyeOffset.x, cy + eyeOffset.y, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + (direction.x !== 0 ? direction.x * 4 : -4), cy + (direction.y !== 0 ? direction.y * 4 : 4), 2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function tick() {
+    direction = {...nextDirection};
+    const head = {x: snake[0].x + direction.x, y: snake[0].y + direction.y};
+    const eating = head.x === food.x && head.y === food.y;
+    const bodyToCheck = eating ? snake : snake.slice(0, -1);
+    if (head.x < 0 || head.x >= cells || head.y < 0 || head.y >= cells ||
+        bodyToCheck.some(part => part.x === head.x && part.y === head.y)) {
+      endGame();
+      return;
+    }
+    snake.unshift(head);
+    if (eating) {
+      score += 10;
+      scoreEl.textContent = score;
+      sfx.eat();
+      if (score > best) {
+        best = score; bestEl.textContent = best;
+        try { localStorage.setItem('neonSnakeBest', best); } catch (_) {}
+      }
+      placeFood();
+      // 分数越高，速度略微提升
+      if (score % 50 === 0) { clearInterval(timer); timer = setInterval(tick, Math.max(115, 180 - Math.floor(score / 10) * 3)); }
+    } else {
+      snake.pop();
+    }
+    draw();
+  }
+
+  function showOverlay(title, message, buttonText) {
+    overlayTitle.textContent = title;
+    overlayText.textContent = message;
+    overlayBtn.textContent = buttonText;
+    overlay.classList.remove('hidden');
+  }
+  function hideOverlay() { overlay.classList.add('hidden'); }
+
+  function startGame() {
+    if (running) return;
+    if (!snake || score === undefined) resetGame();
+    running = true;
+    hideOverlay();
+    pauseBtn.textContent = '暂停';
+    clearInterval(timer);
+    timer = setInterval(tick, Math.max(115, 180 - Math.floor(score / 10) * 3));
+    sfx.start();
+    startBackgroundMusic();
+  }
+
+  function pauseGame() {
+    if (!running) return;
+    running = false;
+    clearInterval(timer);
+    stopBackgroundMusic();
+    pauseBtn.textContent = '继续';
+    showOverlay('游戏暂停', '休息一下！准备好后继续挑战。', '继续游戏');
+    sfx.pause();
+  }
+
+  function endGame() {
+    running = false;
+    clearInterval(timer);
+    stopBackgroundMusic();
+    pauseBtn.textContent = '暂停';
+    showOverlay('游戏结束！', `本次得分：${score}。再试一次，刷新你的最高分吧！`, '重新开始');
+    sfx.over();
+  }
+
+  function changeDirection(dir) {
+    const map = {
+      up: {x: 0, y: -1}, down: {x: 0, y: 1},
+      left: {x: -1, y: 0}, right: {x: 1, y: 0}
+    };
+    const candidate = map[dir];
+    if (!candidate) return;
+    if (candidate.x === -direction.x && candidate.y === -direction.y) return;
+    nextDirection = candidate;
+    if (!running && !overlay.classList.contains('hidden')) {
+      // 开始画面仍需点击开始，避免按方向键意外启动
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const keys = {
+      ArrowUp: 'up', w: 'up', W: 'up',
+      ArrowDown: 'down', s: 'down', S: 'down',
+      ArrowLeft: 'left', a: 'left', A: 'left',
+      ArrowRight: 'right', d: 'right', D: 'right'
+    };
+    if (keys[e.key]) { e.preventDefault(); changeDirection(keys[e.key]); }
+    if (e.code === 'Space' || e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      if (running) pauseGame();
+      else if (snake && score !== undefined && overlayTitle.textContent === '游戏暂停') startGame();
+    }
+  });
+
+  document.querySelectorAll('.mobile-controls button').forEach(btn => {
+    btn.addEventListener('click', () => changeDirection(btn.dataset.dir));
+  });
+  startBtn.addEventListener('click', () => {
+    if (running) return;
+    if (overlayTitle.textContent === '游戏结束！') resetGame();
+    startGame();
+  });
+  overlayBtn.addEventListener('click', () => {
+    if (overlayTitle.textContent === '游戏结束！' || overlayTitle.textContent === '准备好了吗？') resetGame();
+    startGame();
+  });
+  pauseBtn.addEventListener('click', () => {
+    if (running) pauseGame();
+    else if (overlayTitle.textContent === '游戏暂停') startGame();
+  });
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '🔊 音乐/音效开' : '🔇 音乐/音效关';
+    soundBtn.setAttribute('aria-pressed', String(soundOn));
+    if (soundOn) {
+      playTone(660, .08);
+      if (running) startBackgroundMusic();
+    } else {
+      stopBackgroundMusic();
+    }
+  });
+
+  resetGame();
+  // 让食物轻微闪烁，即使蛇没有移动也能保持动态
+  function animateFood() {
+    if (!overlay.classList.contains('hidden') || running) draw();
+    requestAnimationFrame(animateFood);
+  }
+  requestAnimationFrame(animateFood);
+})();
+</script>
+</body>
+</html>
